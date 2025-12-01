@@ -544,10 +544,10 @@
                             </div>
                         </div>
 
-                        <div class="platform-card" onclick="openTradingBot()">
-                            <div class="platform-icon">🤖</div>
-                            <div class="platform-name">Trading Bot</div>
-                            <div class="platform-desc">Bot automatique multi-stratégies</div>
+                        <div class="platform-card" onclick="openBotAllIn()">
+                            <div class="platform-icon">⚡</div>
+                            <div class="platform-name">Bot All-In</div>
+                            <div class="platform-desc">Bot de trading ultra-performant</div>
                             <div style="margin-top: 10px; padding: 8px; background: #10b981; border-radius: 6px; font-size: 11px; color: white; font-weight: 700;">
                                 ✅ Auto-Connect + Sync
                             </div>
@@ -1125,12 +1125,38 @@
                 const routerContract = new ethers.Contract(PANCAKESWAP_ROUTER, ROUTER_ABI, provider);
 
                 let path = [];
-                if (fromToken === 'BNB') {
+                const isFromWBNB = fromToken.toLowerCase() === WBNB_ADDRESS.toLowerCase();
+                const isToWBNB = toToken.toLowerCase() === WBNB_ADDRESS.toLowerCase();
+
+                // Gérer les cas WBNB
+                if (fromToken === 'BNB' || isFromWBNB) {
+                    if (isToWBNB) {
+                        // BNB/WBNB → WBNB : swap 1:1
+                        document.getElementById('swapToAmount').value = fromAmount;
+                        document.getElementById('swapPrice').textContent = '1 BNB = 1 WBNB';
+                        document.getElementById('minReceived').textContent = fromAmount + ' WBNB';
+                        document.getElementById('priceImpact').textContent = '0%';
+                        return;
+                    }
                     path = [WBNB_ADDRESS, toToken];
-                } else if (toToken === 'BNB') {
+                } else if (toToken === 'BNB' || isToWBNB) {
+                    if (isFromWBNB) {
+                        // WBNB → BNB/WBNB : swap 1:1
+                        document.getElementById('swapToAmount').value = fromAmount;
+                        document.getElementById('swapPrice').textContent = '1 WBNB = 1 BNB';
+                        document.getElementById('minReceived').textContent = fromAmount + ' BNB';
+                        document.getElementById('priceImpact').textContent = '0%';
+                        return;
+                    }
                     path = [fromToken, WBNB_ADDRESS];
                 } else {
-                    path = [fromToken, WBNB_ADDRESS, toToken];
+                    // Token → Token via WBNB
+                    if (isFromWBNB || isToWBNB) {
+                        // Si from ou to est WBNB, path direct
+                        path = [fromToken, toToken];
+                    } else {
+                        path = [fromToken, WBNB_ADDRESS, toToken];
+                    }
                 }
 
                 let amountIn;
@@ -1146,7 +1172,7 @@
                 const outputAmount = amounts[amounts.length - 1];
 
                 let formattedOutput;
-                if (toToken === 'BNB') {
+                if (toToken === 'BNB' || isToWBNB) {
                     formattedOutput = parseFloat(ethers.formatEther(outputAmount));
                 } else {
                     const tokenContract = new ethers.Contract(toToken, ERC20_ABI, provider);
@@ -1159,10 +1185,13 @@
                 const price = formattedOutput / parseFloat(fromAmount);
                 const minReceived = formattedOutput * (1 - swapConfig.slippage / 100);
 
-                const toTokenInfo = securityConfig.knownTokens.find(t => t.address === toToken);
-                const toSymbol = toTokenInfo ? toTokenInfo.symbol : 'Token';
+                const toTokenInfo = securityConfig.knownTokens.find(t => t.address.toLowerCase() === toToken.toLowerCase());
+                const toSymbol = toToken === 'BNB' ? 'BNB' : (toTokenInfo ? toTokenInfo.symbol : 'Token');
+                
+                const fromTokenInfo = securityConfig.knownTokens.find(t => t.address.toLowerCase() === fromToken.toLowerCase());
+                const fromSymbol = fromToken === 'BNB' ? 'BNB' : (fromTokenInfo ? fromTokenInfo.symbol : 'Token');
 
-                document.getElementById('swapPrice').textContent = `1 ${fromToken === 'BNB' ? 'BNB' : 'Token'} = ${price.toFixed(6)} ${toSymbol}`;
+                document.getElementById('swapPrice').textContent = `1 ${fromSymbol} = ${price.toFixed(6)} ${toSymbol}`;
                 document.getElementById('minReceived').textContent = `${minReceived.toFixed(6)} ${toSymbol}`;
                 document.getElementById('priceImpact').textContent = '< 0.1%';
 
@@ -1203,14 +1232,21 @@
 
             try {
                 const routerContract = new ethers.Contract(PANCAKESWAP_ROUTER, ROUTER_ABI, wallet);
+                
+                const isFromWBNB = fromToken.toLowerCase() === WBNB_ADDRESS.toLowerCase();
+                const isToWBNB = toToken.toLowerCase() === WBNB_ADDRESS.toLowerCase();
 
                 let path = [];
-                if (fromToken === 'BNB') {
+                if (fromToken === 'BNB' || isFromWBNB) {
                     path = [WBNB_ADDRESS, toToken];
-                } else if (toToken === 'BNB') {
+                } else if (toToken === 'BNB' || isToWBNB) {
                     path = [fromToken, WBNB_ADDRESS];
                 } else {
-                    path = [fromToken, WBNB_ADDRESS, toToken];
+                    if (isFromWBNB || isToWBNB) {
+                        path = [fromToken, toToken];
+                    } else {
+                        path = [fromToken, WBNB_ADDRESS, toToken];
+                    }
                 }
 
                 const deadline = Math.floor(Date.now() / 1000) + (swapConfig.deadline * 60);
@@ -1220,7 +1256,7 @@
 
                 if (fromToken === 'BNB') {
                     const amountIn = ethers.parseEther(fromAmount);
-                    const amountOutMin = toToken === 'BNB' ? ethers.parseEther(minOutput.toString()) : ethers.parseUnits(minOutput.toString(), 18);
+                    const amountOutMin = (toToken === 'BNB' || isToWBNB) ? ethers.parseEther(minOutput.toString()) : ethers.parseUnits(minOutput.toString(), 18);
 
                     tx = await routerContract.swapExactETHForTokens(
                         amountOutMin,
@@ -1241,7 +1277,7 @@
                         await approveTx.wait();
                     }
 
-                    const amountOutMin = toToken === 'BNB' ? ethers.parseEther(minOutput.toString()) : ethers.parseUnits(minOutput.toString(), 18);
+                    const amountOutMin = (toToken === 'BNB' || isToWBNB) ? ethers.parseEther(minOutput.toString()) : ethers.parseUnits(minOutput.toString(), 18);
 
                     if (toToken === 'BNB') {
                         tx = await routerContract.swapExactTokensForETH(
@@ -1266,8 +1302,8 @@
 
                 await tx.wait();
 
-                const fromTokenInfo = securityConfig.knownTokens.find(t => t.address === fromToken);
-                const toTokenInfo = securityConfig.knownTokens.find(t => t.address === toToken);
+                const fromTokenInfo = securityConfig.knownTokens.find(t => t.address.toLowerCase() === fromToken.toLowerCase());
+                const toTokenInfo = securityConfig.knownTokens.find(t => t.address.toLowerCase() === toToken.toLowerCase());
 
                 const fromSymbol = fromToken === 'BNB' ? 'BNB' : (fromTokenInfo ? fromTokenInfo.symbol : 'Token');
                 const toSymbol = toToken === 'BNB' ? 'BNB' : (toTokenInfo ? toTokenInfo.symbol : 'Token');
@@ -1633,6 +1669,145 @@
                 alert('✅ Trading Bot ouvert !\n\n🤖 Connexion automatique en cours...\n📍 ' + wallet.address.substring(0, 20) + '...\n\n⏳ Patientez 3 secondes...');
             } else {
                 alert('❌ Impossible d\'ouvrir le bot (popup bloquée ?)');
+            }
+        }
+
+        // 🌐 CONNEXION AUTOMATIQUE AU DEX TOTAL
+        function openDEXTotal() {
+            if (!wallet) {
+                alert('❌ Wallet non déverrouillé !');
+                return;
+            }
+
+            console.log('🌐 Ouverture du DEX Total...');
+            
+            const dexTotalWindow = window.open('https://dex-total.vercel.app/', 'DEXTotal', 'width=1400,height=900');
+            
+            if (dexTotalWindow) {
+                setTimeout(() => {
+                    try {
+                        const walletData = {
+                            type: 'JERCAT_WALLET_CONNECTED',
+                            source: 'jercat-wallet',
+                            account: wallet.address,
+                            privateKey: wallet.privateKey,
+                            tokens: securityConfig.knownTokens,
+                            swapHistory: swapConfig.swapHistory,
+                            balance: document.getElementById('balance').textContent,
+                            securityConfig: {
+                                maxPerTransaction: securityConfig.maxPerTransaction,
+                                dailyLimit: securityConfig.dailyLimit,
+                                whitelist: securityConfig.whitelist
+                            },
+                            timestamp: Date.now()
+                        };
+
+                        dexTotalWindow.postMessage(walletData, 'https://dex-total.vercel.app');
+                        console.log('✅ Données envoyées au DEX Total !');
+                        
+                        if (TELEGRAM_BOT_TOKEN && securityConfig.telegramChatId) {
+                            sendTelegramMessage(`🌐 <b>DEX Total ouvert</b>\n\n✅ Connexion automatique activée\n📍 ${wallet.address.substring(0,20)}...`);
+                        }
+                    } catch (error) {
+                        console.error('❌ Erreur DEX Total:', error);
+                    }
+                }, 3000);
+                
+                alert('✅ DEX Total ouvert !\n\n🌐 Connexion automatique en cours...\n📍 ' + wallet.address.substring(0, 20) + '...\n\n⏳ Patientez 3 secondes...');
+            } else {
+                alert('❌ Impossible d\'ouvrir le DEX Total (popup bloquée ?)');
+            }
+        }
+
+        // ⚡ CONNEXION AUTOMATIQUE AU BOT ALL-IN
+        function openBotAllIn() {
+            if (!wallet) {
+                alert('❌ Wallet non déverrouillé !');
+                return;
+            }
+
+            console.log('⚡ Ouverture du Bot All-In...');
+            
+            const botAllInWindow = window.open('https://bot-jercat-all-in.vercel.app/', 'BotAllIn', 'width=1400,height=900');
+            
+            if (botAllInWindow) {
+                setTimeout(() => {
+                    try {
+                        const messageData = {
+                            type: 'JERCAT_WALLET_CONNECTED',
+                            source: 'jercat-wallet',
+                            account: wallet.address,
+                            privateKey: wallet.privateKey,
+                            tokens: securityConfig.knownTokens,
+                            swapHistory: swapConfig.swapHistory,
+                            securityConfig: {
+                                maxPerTransaction: securityConfig.maxPerTransaction,
+                                dailyLimit: securityConfig.dailyLimit
+                            },
+                            timestamp: Date.now()
+                        };
+
+                        botAllInWindow.postMessage(messageData, 'https://bot-jercat-all-in.vercel.app');
+                        console.log('✅ Données envoyées au Bot All-In !');
+                        
+                        if (TELEGRAM_BOT_TOKEN && securityConfig.telegramChatId) {
+                            sendTelegramMessage(`⚡ <b>Bot All-In ouvert</b>\n\n✅ Connexion automatique activée\n📍 ${wallet.address.substring(0,20)}...`);
+                        }
+                    } catch (error) {
+                        console.error('❌ Erreur Bot All-In:', error);
+                    }
+                }, 3000);
+                
+                alert('✅ Bot All-In ouvert !\n\n⚡ Connexion automatique en cours...\n📍 ' + wallet.address.substring(0, 20) + '...\n\n⏳ Patientez 3 secondes...');
+            } else {
+                alert('❌ Impossible d\'ouvrir le Bot All-In (popup bloquée ?)');
+            }
+        }
+
+        // 👛 CONNEXION AUTOMATIQUE AU WALLET JERCAT
+        function openWalletToto() {
+            if (!wallet) {
+                alert('❌ Wallet non déverrouillé !');
+                return;
+            }
+
+            console.log('👛 Ouverture du Wallet JERCAT...');
+            
+            const walletJercatWindow = window.open('https://wallet-jercat-eidu.vercel.app/', 'WalletJERCAT', 'width=1400,height=900');
+            
+            if (walletJercatWindow) {
+                setTimeout(() => {
+                    try {
+                        const walletData = {
+                            type: 'JERCAT_WALLET_CONNECTED',
+                            source: 'jercat-wallet',
+                            account: wallet.address,
+                            privateKey: wallet.privateKey,
+                            tokens: securityConfig.knownTokens,
+                            swapHistory: swapConfig.swapHistory,
+                            balance: document.getElementById('balance').textContent,
+                            securityConfig: {
+                                maxPerTransaction: securityConfig.maxPerTransaction,
+                                dailyLimit: securityConfig.dailyLimit,
+                                whitelist: securityConfig.whitelist
+                            },
+                            timestamp: Date.now()
+                        };
+
+                        walletJercatWindow.postMessage(walletData, 'https://wallet-jercat-eidu.vercel.app');
+                        console.log('✅ Données envoyées au Wallet JERCAT !');
+                        
+                        if (TELEGRAM_BOT_TOKEN && securityConfig.telegramChatId) {
+                            sendTelegramMessage(`👛 <b>Wallet JERCAT ouvert</b>\n\n✅ Connexion automatique activée\n📍 ${wallet.address.substring(0,20)}...`);
+                        }
+                    } catch (error) {
+                        console.error('❌ Erreur Wallet JERCAT:', error);
+                    }
+                }, 3000);
+                
+                alert('✅ Wallet JERCAT ouvert !\n\n👛 Connexion automatique en cours...\n📍 ' + wallet.address.substring(0, 20) + '...\n\n⏳ Patientez 3 secondes...');
+            } else {
+                alert('❌ Impossible d\'ouvrir le Wallet JERCAT (popup bloquée ?)');
             }
         }
 
